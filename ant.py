@@ -1,63 +1,77 @@
-import numpy as np
+class Ant:
+    def __init__(self, start_city, num_cities):
+        self.start_city = start_city
+        self.num_cities = num_cities
+        self.route = [start_city]
+        self.distance = 0
 
-# Parameter Algoritma
-num_ants = 2
-num_iterations = 3
-pheromone_evaporation_coefficient = 0.5
-pheromone_constant = 1
-visibility_constant = 2
+    def visit_city(self, city, distance):
+        self.route.append(city)
+        self.distance += distance
 
-# Jarak antar kota
-distances = np.array([
-    [0, 10, 15, 20],
-    [10, 0, 35, 25],
-    [15, 35, 0, 30],
-    [20, 25, 30, 0]
-])
+    def complete_route(self, distance_matrix):
+        self.visit_city(self.start_city, distance_matrix[self.route[-1]][self.start_city])
 
-# Matriks feromon awal
-pheromones = np.full(distances.shape, 0.1)
+class AntColonyOptimization:
+    def __init__(self, num_cities, distance_matrix, num_ants, evaporation_rate, alpha=1, beta=2, Q=100):
+        self.num_cities = num_cities
+        self.distance_matrix = distance_matrix
+        self.num_ants = num_ants
+        self.evaporation_rate = evaporation_rate
+        self.alpha = alpha
+        self.beta = beta
+        self.Q = Q
+        self.pheromone_matrix = [[1 for _ in range(num_cities)] for _ in range(num_cities)]
+        self.ants = [Ant(start_city, num_cities) for start_city in [0, 3, 6]]
 
-# Fungsi untuk menghitung visibilitas
-def calculate_visibility(distances):
-    visibility = np.zeros_like(distances, dtype=float)
-    with np.errstate(divide='ignore'):
-        visibility[distances > 0] = 1 / distances[distances > 0]
-    return visibility
+    def run(self, iterations):
+        for _ in range(iterations):
+            self.construct_solutions()
+            self.update_pheromones()
 
-# Fungsi untuk menghitung probabilitas perpindahan
-def calculate_transition_probabilities(pheromones, visibility, current_city, visited):
-    probabilities = np.zeros_like(pheromones[current_city])
-    for city in range(len(probabilities)):
-        if city not in visited:
-            probabilities[city] = (pheromones[current_city, city] ** pheromone_constant) * (visibility[current_city, city] ** visibility_constant)
-    probabilities /= probabilities.sum()
-    return probabilities
+    def construct_solutions(self):
+        for ant in self.ants:
+            visited = set(ant.route)
+            while len(ant.route) < self.num_cities:
+                current_city = ant.route[-1]
+                next_city = self.select_next_city(ant, current_city, visited)
+                ant.visit_city(next_city, self.distance_matrix[current_city][next_city])
+                visited.add(next_city)
+            ant.complete_route(self.distance_matrix)
 
-# Fungsi untuk memperbarui feromon
-def update_pheromones(pheromones, all_routes, distances):
-    pheromones *= (1 - pheromone_evaporation_coefficient)
-    for route in all_routes:
-        route_length = sum(distances[route[i], route[i + 1]] for i in range(len(route) - 1))
-        for i in range(len(route) - 1):
-            pheromones[route[i], route[i + 1]] += 1 / route_length
-    return pheromones
+    def select_next_city(self, ant, current_city, visited):
+        probabilities = []
+        for city in range(self.num_cities):
+            if city not in visited:
+                pheromone = self.pheromone_matrix[current_city][city] ** self.alpha
+                visibility = (1 / self.distance_matrix[current_city][city]) ** self.beta
+                probabilities.append(pheromone * visibility)
+            else:
+                probabilities.append(0)
+        next_city = probabilities.index(max(probabilities))
+        return next_city
 
-# Algoritma ACO
-visibility = calculate_visibility(distances)
-for iteration in range(num_iterations):
-    all_routes = []
-    for ant in range(num_ants):
-        route = [np.random.randint(0, len(distances))]
-        while len(route) < len(distances):
-            current_city = route[-1]
-            probabilities = calculate_transition_probabilities(pheromones, visibility, current_city, route)
-            next_city = np.random.choice(range(len(distances)), p=probabilities)
-            route.append(next_city)
-        route.append(route[0])  # kembali ke kota asal
-        all_routes.append(route)
-    pheromones = update_pheromones(pheromones, all_routes, distances)
+    def update_pheromones(self):
+        for i in range(self.num_cities):
+            for j in range(self.num_cities):
+                self.pheromone_matrix[i][j] *= (1 - self.evaporation_rate)
+        for ant in self.ants:
+            for i in range(len(ant.route) - 1):
+                self.pheromone_matrix[ant.route[i]][ant.route[i + 1]] += self.Q / ant.distance
+                self.pheromone_matrix[ant.route[i + 1]][ant.route[i]] += self.Q / ant.distance
 
-# Menampilkan hasil
-for i, route in enumerate(all_routes):
-    print(f"Rute semut {i + 1}: {route} dengan panjang rute {sum(distances[route[j], route[j + 1]] for j in range(len(route) - 1))}")
+distance_matrix = [
+    [0, 4, 3, 7, 3, 6, 8],
+    [4, 0, 6, 3, 4, 7, 5],
+    [3, 6, 0, 5, 2, 3, 4],
+    [7, 3, 5, 0, 6, 3, 4],
+    [3, 4, 2, 6, 0, 5, 6],
+    [6, 7, 3, 3, 5, 0, 2],
+    [8, 5, 4, 4, 6, 2, 0]
+]
+
+aco = AntColonyOptimization(num_cities=7, distance_matrix=distance_matrix, num_ants=3, evaporation_rate=0.5, alpha=1, beta=2, Q=100)
+aco.run(iterations=1)
+
+for row in aco.pheromone_matrix:
+    print(row)
